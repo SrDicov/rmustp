@@ -6,29 +6,186 @@ on:
 permissions:
   contents: write
 
+# 10 binaries: {x86_64, i686, aarch64, armv7, riscv64} x {glibc, musl}.
+# riscv32-linux does not exist in stable Rust: riscv ships 64-bit only.
+# Every binary is smoke-tested under QEMU before upload.
+
 jobs:
-  build:
+  build-gnu:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - short: x86_64-gnu
+            triple: x86_64-unknown-linux-gnu
+            native: true
+          - short: i686-gnu
+            triple: i686-unknown-linux-gnu
+            deb_arch: i386
+            pkg: gcc-i686-linux-gnu
+            gcc: i686-linux-gnu-gcc
+            qemu: qemu-i386
+            sysroot: /usr/i686-linux-gnu
+          - short: aarch64-gnu
+            triple: aarch64-unknown-linux-gnu
+            deb_arch: arm64
+            pkg: gcc-aarch64-linux-gnu
+            gcc: aarch64-linux-gnu-gcc
+            qemu: qemu-aarch64
+            sysroot: /usr/aarch64-linux-gnu
+          - short: armv7-gnu
+            triple: armv7-unknown-linux-gnueabihf
+            deb_arch: armhf
+            pkg: gcc-arm-linux-gnueabihf
+            gcc: arm-linux-gnueabihf-gcc
+            qemu: qemu-arm
+            sysroot: /usr/arm-linux-gnueabihf
+          - short: riscv64-gnu
+            triple: riscv64gc-unknown-linux-gnu
+            deb_arch: riscv64
+            pkg: gcc-riscv64-linux-gnu
+            gcc: riscv64-linux-gnu-gcc
+            qemu: qemu-riscv64
+            sysroot: /usr/riscv64-linux-gnu
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
       - name: System deps
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libasound2-dev
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libasound2-dev qemu-user
+          if [ -n "${{ matrix.deb_arch }}" ]; then
+            sudo dpkg --add-architecture ${{ matrix.deb_arch }}
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ${{ matrix.pkg }} libasound2-dev:${{ matrix.deb_arch }}
+          fi
+      - name: Linker env
+        if: matrix.gcc != ''
+        run: |
+          T=$(echo '${{ matrix.triple }}' | tr 'a-z-' 'A-Z_')
+          echo "CARGO_TARGET_${T}_LINKER=${{ matrix.gcc }}" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH_${T}=${{ matrix.sysroot }}/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
       - name: Build
-        run: cargo build --release
+        run: cargo build --release --target ${{ matrix.triple }}
+      - name: Smoke (QEMU or native)
+        run: |
+          BIN=target/${{ matrix.triple }}/release/rmustp
+          if [ -n "${{ matrix.qemu }}" ]; then RUN="${{ matrix.qemu }} -L ${{ matrix.sysroot }}"; else RUN=""; fi
+          $RUN $BIN --version
+          $RUN $BIN </dev/null; code=$?; test "$code" -eq 2
       - name: Package
         run: |
           mkdir -p dist
-          cp target/release/rmustp dist/
+          cp target/${{ matrix.triple }}/release/rmustp dist/rmustp
           cp README.md LICENSE CHANGELOG.md dist/
-          cd dist && tar -czf ../rmustp-${{ github.ref_name }}-x86_64-linux.tar.gz *
-      - name: Checksum
-        run: sha256sum rmustp-*.tar.gz > rmustp-${{ github.ref_name }}-x86_64-linux.tar.gz.sha256
+          cd dist && tar -czf ../rmustp-${{ github.ref_name }}-${{ matrix.short }}.tar.gz *
+          cd .. && sha256sum rmustp-${{ github.ref_name }}-${{ matrix.short }}.tar.gz > rmustp-${{ github.ref_name }}-${{ matrix.short }}.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rmustp-${{ matrix.short }}
+          path: |
+            rmustp-${{ github.ref_name }}-${{ matrix.short }}.tar.gz
+            rmustp-${{ github.ref_name }}-${{ matrix.short }}.tar.gz.sha256
+
+  build-musl:
+    runs-on: ubuntu-latest
+    container:
+      image: messense/rust-musl-cross:${{ matrix.tag }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - short: x86_64-musl
+            triple: x86_64-unknown-linux-musl
+            tag: x86_64-musl
+            cc: x86_64-linux-musl-gcc
+            host: x86_64-linux-musl
+            qemu: qemu-x86_64
+          - short: i686-musl
+            triple: i686-unknown-linux-musl
+            tag: i686-musl
+            cc: i686-linux-musl-gcc
+            host: i686-linux-musl
+            qemu: qemu-i386
+          - short: aarch64-musl
+            triple: aarch64-unknown-linux-musl
+            tag: aarch64-musl
+            cc: aarch64-linux-musl-gcc
+            host: aarch64-linux-musl
+            qemu: qemu-aarch64
+          - short: armv7-musl
+            triple: armv7-unknown-linux-musleabihf
+            tag: armv7-musleabihf
+            cc: arm-linux-musleabihf-gcc
+            host: arm-linux-musleabihf
+            qemu: qemu-arm
+          - short: riscv64-musl
+            triple: riscv64gc-unknown-linux-musl
+            tag: riscv64gc-musl
+            cc: riscv64-linux-musl-gcc
+            host: riscv64-linux-musl
+            qemu: qemu-riscv64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust target
+        run: rustup target add ${{ matrix.triple }}
+      - name: ALSA (static, musl sysroot)
+        run: |
+          for c in ${{ matrix.cc }} musl-gcc; do
+            if command -v "$c" >/dev/null 2>&1; then CC="$c"; break; fi
+          done
+          if [ -z "${CC:-}" ]; then echo "--- no musl cc; candidates:"; compgen -c | grep -E 'gcc$' | sort -u | head -20; exit 1; fi
+          echo "CC=$CC"
+          ALSA=1.2.12
+          curl -sSL "https://www.alsa-project.org/files/pub/lib/alsa-lib-$ALSA.tar.bz2" -o /tmp/alsa.tar.bz2
+          tar -xf /tmp/alsa.tar.bz2 -C /tmp
+          cd "/tmp/alsa-lib-$ALSA"
+          ./configure --host=${{ matrix.host }} --prefix=/opt/alsa --enable-shared=no --disable-python "CC=$CC"
+          make -j"$(nproc)" && make install
+      - name: Build
+        env:
+          PKG_CONFIG_PATH: /opt/alsa/lib/pkgconfig
+          PKG_CONFIG_ALLOW_CROSS: 1
+        run: cargo build --release --target ${{ matrix.triple }}
+      - name: Smoke (QEMU, static)
+        run: |
+          apt-get update -qq && apt-get install -y -qq qemu-user
+          BIN=target/${{ matrix.triple }}/release/rmustp
+          file "$BIN"
+          ${{ matrix.qemu }} "$BIN" --version
+          ${{ matrix.qemu }} "$BIN" </dev/null; code=$?; test "$code" -eq 2
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.triple }}/release/rmustp dist/rmustp
+          cp README.md LICENSE CHANGELOG.md dist/
+          cd dist && tar -czf ../rmustp-${{ github.ref_name }}-${{ matrix.short }}.tar.gz *
+          cd .. && sha256sum rmustp-${{ github.ref_name }}-${{ matrix.short }}.tar.gz > rmustp-${{ github.ref_name }}-${{ matrix.short }}.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rmustp-${{ matrix.short }}
+          path: |
+            rmustp-${{ github.ref_name }}-${{ matrix.short }}.tar.gz
+            rmustp-${{ github.ref_name }}-${{ matrix.short }}.tar.gz.sha256
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [build-gnu, build-musl]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rmustp-*
+          path: artifacts
+          merge-multiple: true
+      - name: List
+        run: ls -l artifacts/ && sha256sum -c artifacts/*.sha256
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          files: |
-            rmustp-*.tar.gz
-            rmustp-*.tar.gz.sha256
+          files: artifacts/*
           generate_release_notes: true
