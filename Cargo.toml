@@ -1,0 +1,19 @@
+[package]
+name = "rmustp"
+version = "1.0.0"
+edition = "2021"
+description = "POSIX terminal music player in Rust"
+license = "MIT"
+
+[dependencies]
+rodio = "0.20"
+jpeg-decoder = "0.3"
+png = "0.17"
+libc = "0.2"
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort" # ponytail: el hook de term.rs restaura también en abort; unwind sobra (~+96KB).
