@@ -5,8 +5,8 @@ use std::sync::Mutex;
 static SAVED: Mutex<Option<libc::termios>> = Mutex::new(None);
 
 extern "C" fn on_term(_sig: i32) {
-    // ponytail: restore best-effort + _exit; tcsetattr en handler no es 100% async-signal-safe.
-    if let Ok(g) = SAVED.lock() {
+    // ponytail: try_lock, nunca lock: en señal/handler bloquear = colgar; None/ocupado = skip.
+    if let Ok(g) = SAVED.try_lock() {
         if let Some(t) = g.as_ref() {
             // SAFETY: tcsetattr con el termios guardado; unico writer en el hilo main.
             unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, t) };
@@ -26,7 +26,8 @@ pub fn install_signals() {
     // restaura el terminal donde el Drop ya no llega. Encadena el hook previo (mensaje).
     let prev = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        if let Ok(g) = SAVED.lock() {
+        // ponytail: try_lock como en on_term: pánico con el Mutex tomado = skip, nunca deadlock.
+        if let Ok(g) = SAVED.try_lock() {
             if let Some(t) = g.as_ref() {
                 // SAFETY: contexto de pánico normal (no señal); tcsetattr best-effort.
                 unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, t) };
