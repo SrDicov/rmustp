@@ -438,9 +438,12 @@ pub fn draw_search(p: &Player, t: &ThemeMgr, query: &str, matches: &[usize], mro
         let right = " ↑/↓ select · Enter play · Esc cancel";
         o.push_str(&c.w2);
         o.push_str(&left);
-        o.push_str(&" ".repeat(cols.saturating_sub(left.len() + term::dw(right))));
+        // ponytail: hints recortadas al ancho como en status() (nunca wrap).
+        let budget = cols.saturating_sub(left.len());
+        let rshow = term::trunc(right, budget);
+        o.push_str(&" ".repeat(budget.saturating_sub(term::dw(&rshow))));
         o.push_str(&c.w3);
-        o.push_str(right);
+        o.push_str(&rshow);
     }
     o.push_str(RST);
     o.push_str("\x1b[?2026l");

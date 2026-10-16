@@ -1,6 +1,7 @@
 # rmustp
 
 Reproductor de música para terminal, en Rust. Solo POSIX (Linux/macOS).
+POSIX-only por diseño, verificado solo en Linux (sin Mac/*BSD a mano).
 Reescritura de `cmuspp`: un binario, 4 dependencias, cero código de audio propio.
 
 ## Compilar / ejecutar

@@ -212,6 +212,7 @@ impl ThemeMgr {
     pub fn apply(&mut self, i: usize) {
         self.idx = i % THEMES.len();
         self.c = Colors::of(&THEMES[self.idx]);
+        // ponytail: .last_theme en CWD, no en $XDG_STATE_HOME. Upgrade: XDG.
         let _ = fs::write(".last_theme", format!("{}\n", self.idx));
     }
 }
