@@ -21,6 +21,6 @@
 - App writes `.last_theme` in CWD (gitignored, like `target/`). Don't commit either.
 - POSIX only. Sin TTY (stdin/stdout) → exit 2 limpio. `unsafe` acotado a `src/term.rs`.
 
-## Estado heredado (C++, deprecated)
-- Old C++ path (`main.cpp`, `backend/`, `frontend/`, `themes/*.xml`) superseded por la
-  reescritura Rust; la fuente de verdad es `src/`. Quedan en el árbol y en git history.
+## Estado heredado (C++, eliminado)
+- Old C++ path (`main.cpp`, `backend/`, `frontend/`, `themes/*.xml`, docs traducidos)
+  eliminado del árbol; vive solo en git history. La fuente de verdad es `src/`.
