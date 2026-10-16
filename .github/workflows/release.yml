@@ -58,6 +58,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq libasound2-dev qemu-user
           if [ -n "${{ matrix.deb_arch }}" ]; then
+            # ponytail: los ports (arm64/armhf/riscv64) no están en security.ubuntu.com.
+            echo "deb [arch=${{ matrix.deb_arch }}] http://ports.ubuntu.com/ubuntu-ports noble main universe" | sudo tee "/etc/apt/sources.list.d/ports-${{ matrix.deb_arch }}.list"
+            echo "deb [arch=${{ matrix.deb_arch }}] http://ports.ubuntu.com/ubuntu-ports noble-updates main universe" | sudo tee -a "/etc/apt/sources.list.d/ports-${{ matrix.deb_arch }}.list"
             sudo dpkg --add-architecture ${{ matrix.deb_arch }}
             sudo apt-get update -qq
             sudo apt-get install -y -qq ${{ matrix.pkg }} libasound2-dev:${{ matrix.deb_arch }}
@@ -76,7 +79,8 @@ jobs:
           BIN=target/${{ matrix.triple }}/release/rmustp
           if [ -n "${{ matrix.qemu }}" ]; then RUN="${{ matrix.qemu }} -L ${{ matrix.sysroot }}"; else RUN=""; fi
           $RUN $BIN --version
-          $RUN $BIN </dev/null; code=$?; test "$code" -eq 2
+          # ponytail: el `if` exime del `set -e` del runner; `; code=$?` no llegaba nunca.
+          if $RUN $BIN </dev/null; then echo "expected no-TTY exit 2"; exit 1; fi
       - name: Package
         run: |
           mkdir -p dist
@@ -135,10 +139,16 @@ jobs:
         run: rustup target add ${{ matrix.triple }}
       - name: ALSA (static, musl sysroot)
         run: |
-          for c in ${{ matrix.cc }} musl-gcc; do
-            if command -v "$c" >/dev/null 2>&1; then CC="$c"; break; fi
+          echo "PATH=$PATH"
+          env | grep -iE '^(CC|TARGET_CC|CROSS|TARGET)' | head -10 || true
+          for d in /usr/local/bin /opt/musl/bin /musl/bin /opt/cross/bin; do
+            [ -d "$d" ] && export PATH="$d:$PATH"
           done
-          if [ -z "${CC:-}" ]; then echo "--- no musl cc; candidates:"; compgen -c | grep -E 'gcc$' | sort -u | head -20; exit 1; fi
+          echo "--- toolchain hunt:"; find / -maxdepth 5 \( -name '*-gcc' -o -name 'musl-gcc' \) 2>/dev/null | head -20
+          for c in ${{ matrix.cc }} musl-gcc "$TARGET_CC"; do
+            if [ -n "$c" ] && command -v "$c" >/dev/null 2>&1; then CC="$c"; break; fi
+          done
+          if [ -z "${CC:-}" ]; then echo "FATAL: no musl cc found"; exit 1; fi
           echo "CC=$CC"
           ALSA=1.2.12
           curl -sSL "https://www.alsa-project.org/files/pub/lib/alsa-lib-$ALSA.tar.bz2" -o /tmp/alsa.tar.bz2
@@ -157,7 +167,7 @@ jobs:
           BIN=target/${{ matrix.triple }}/release/rmustp
           file "$BIN"
           ${{ matrix.qemu }} "$BIN" --version
-          ${{ matrix.qemu }} "$BIN" </dev/null; code=$?; test "$code" -eq 2
+          if ${{ matrix.qemu }} "$BIN" </dev/null; then echo "expected no-TTY exit 2"; exit 1; fi
       - name: Package
         run: |
           mkdir -p dist

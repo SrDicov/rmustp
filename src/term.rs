@@ -130,8 +130,9 @@ impl Raw {
                 );
             }
             let mut tv = libc::timeval {
-                tv_sec: timeout as i64,
-                tv_usec: ((timeout - timeout.floor()) * 1e6) as i64,
+                // ponytail: time_t/suseconds_t cambian de ancho en 32 bits; nada de i64 fijo.
+                tv_sec: timeout as libc::time_t,
+                tv_usec: ((timeout - timeout.floor()) * 1e6) as libc::suseconds_t,
             };
             libc::select(
                 fd + 1,
