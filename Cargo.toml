@@ -2,8 +2,13 @@
 name = "rmustp"
 version = "1.0.0"
 edition = "2021"
-description = "POSIX terminal music player in Rust"
-license = "MIT"
+description = "TUI music player for POSIX systems"
+license = "GPL-3.0-only"
+repository = "https://github.com/SrDicov/rmustp"
+homepage = "https://github.com/SrDicov/rmustp"
+readme = "README.md"
+keywords = ["music", "tui", "player", "cli", "posix"]
+categories = ["command-line-utilities", "multimedia::audio"]
 
 [dependencies]
 rodio = "0.20"

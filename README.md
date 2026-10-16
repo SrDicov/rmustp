@@ -1,53 +1,60 @@
 # rmustp
 
-Reproductor de música para terminal, en Rust. Solo POSIX (Linux/macOS).
-POSIX-only por diseño, verificado solo en Linux (sin Mac/*BSD a mano).
-Reescritura de `cmuspp`: un binario, 4 dependencias, cero código de audio propio.
+TUI music player for POSIX systems. Rust rewrite of [cmuspp](https://github.com/Ars-byte/cmuspp).
 
-## Compilar / ejecutar
+[![License: GPL-3.0-only](https://img.shields.io/badge/License-GPL--3.0--only-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.65%2B-orange.svg)](https://www.rust-lang.org)
 
-```bash
+## Features
+- Browse, play, pause, seek ±5s, volume
+- Shuffle + repeat (loop)
+- Metadata: WAV, FLAC, OGG, MP3 (artist/album/title/duration/bitrate)
+- Cover art: embedded (FLAC/OGG/MP3 APIC) + directory fallback (`cover.jpg/png`, …)
+- Lyrics: `.lrc` synchronized + embedded (MP3/FLAC/OGG)
+- 9 built-in themes, switchable at runtime
+- POSIX: no daemon, no network, no systemd, no X11
+
+## Requirements
+- Linux (verified). POSIX by design, untested on macOS/*BSD.
+- ~18 MB RAM typical (~30 MB with `LD_PRELOAD` alternative allocator).
+- ALSA headers at build time on Linux (`alsa-lib-devel` or similar).
+- Terminal with ANSI true-color + half-block (`▄`) support.
+
+## Install
+```sh
 cargo build --release
 ./target/release/rmustp
 ```
 
-En Linux hacen falta cabeceras ALSA en build (`alsa-lib-devel` o similar;
-en runtime las usa rodio/cpal por dentro). Sin `themes/` al lado:
-los 9 temas van compilados. Sin red, sin config.
+Or download a prebuilt binary from [Releases](https://github.com/SrDicov/rmustp/releases).
 
-## Comportamiento
+## Usage
+```sh
+rmustp          # file browser starts at $HOME
+rmustp -h       # usage
+rmustp -v       # version
+```
 
-- `↑/↓` navegar, `Enter` reproducir/entrar, `o` explorador, `q` salir.
-- `Space` pausa, `←/→` ∓5s, `n`/`p` siguiente/anterior, `s` shuffle, `r` repeat.
-- `/` buscar (ASCII), `l` letras (`.lrc` al lado, si no tags incrustados),
-  `t` tema (9 built-in), `a` info, `-h`/`-v` usage/version.
-- Portadas: incrustadas (mp3/flac/ogg) + `cover.jpg/png` etc. Solo ANSI
-  half-block. Sin protocolo Kitty a propósito.
-- Tags: escáner propio mínimo ID3v2/FLAC/Vorbis. Lo que rodio no decodifica
-  se salta con una línea en stderr.
-- Escribe `.last_theme` en el directorio de trabajo (heredado de cmuspp).
-- Windows: ni compila (`compile_error!`). Sin TTY (stdin/stdout): exit 2 limpio.
+Player keys: `q` quit, `↑/↓` or `k/j` navigate, `Enter` play, `Space` pause,
+`←/→` or `h` seek ∓5s, `n`/`p` next/previous, `+`/`-` volume, `s` shuffle,
+`r` repeat, `l` lyrics, `t` theme, `/` search, `o` browse, `a` about.
+Browser keys: `→`/`Enter`/`l` open, `←`/`Bksp`/`h` up, `o` home, `q` cancel.
+Search keys: `↑/↓` select, `Enter` play, `Esc` cancel.
 
-## Dependencias (las 4, una línea cada una)
+## Build
+```sh
+cargo build --release
+```
 
-- `rodio` — suena y decodifica (reemplaza libsndfile + ALSA/CoreAudio a mano).
-- `jpeg-decoder` — portadas jpg sin libjpeg (solo RGB/gris).
-- `png` — portadas png sin libpng (solo decode RGB/RGBA/gris-8).
-- `libc` — raw/ioctl/select POSIX sin crossterm. Todo el `unsafe` vive
-  en `src/term.rs`, con `// SAFETY:` por bloque.
-- Transitivas (45, sin features de más): decode vía `symphonia` (mp3),
-  `claxon` (flac), `lewton` (vorbis); audio vía `cpal` + `alsa-sys`;
-  resto utilidades (`bitflags`, `log`, etc.). `rodio` las trae con
-  `default-features=false` + solo nuestros 4 codecs.
+## Verification
+```sh
+cargo build --release && cargo clippy --release -- -D warnings && cargo fmt --check
+```
 
-## Verificación y diseño
+## License
+GPL-3.0-only. See [LICENSE](LICENSE).
 
-- Por qué rodio y no libsndfile vía FFI: rodio ya hace decode + resample interno
-  al device; reintroducir FFI sería el mismo trabajo en otro lenguaje.
-- Verificación: `cargo build --release && cargo clippy -- -D warnings && cargo fmt --check`;
-  smoke manual del binario. No hay tests (decisión del proyecto).
-- Requisitos: ~18 MB RAM típico (~30 MB con `LD_PRELOAD` de asignador
-  alternativo como mimalloc; `// ponytail: arenas rodio/cpal/ALSA. Upgrade:
-  decoder PCM-only propio sin rodio`). Objetivo: <25 MB en típico.
-- Limitaciones conocidas: CJK de ancho doble desalinea columnas
-  (sin `unicode-width` a propósito, ver `src/term.rs`).
+## Known limitations
+- CJK terminal width: `dw()` counts `chars()`, not display cells. Wide chars may misalign.
+- `.last_theme` stored in CWD, not `$XDG_STATE_HOME`.
+- OGG embedded picture untested (no fixture tooling available).
