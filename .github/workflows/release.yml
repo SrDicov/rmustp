@@ -165,13 +165,10 @@ jobs:
           cd "/tmp/alsa-lib-$ALSA"
           ./configure --host=${{ matrix.host }} --prefix=/opt/alsa --enable-shared=no --disable-python "CC=$CC"
           make -j"$(nproc)" && make install
-          # ponytail: todas las grafías a /opt/alsa (la crate ignora las que no mira;
-          # la imagen no trae alsa, así que pisar sus paths es seguro).
-          TU=$(echo '${{ matrix.triple }}' | tr 'a-z-' 'A-Z_')
-          TD=$(echo '${{ matrix.triple }}' | tr 'A-Z' 'a-z')
-          for v in PKG_CONFIG_PATH "PKG_CONFIG_PATH_${TU}" "PKG_CONFIG_PATH_${TD}" TARGET_PKG_CONFIG_PATH; do
-            echo "$v=/opt/alsa/lib/pkgconfig" >> "$GITHUB_ENV"
-          done
+          # ponytail: alsa-sys prefiere pkg-config; si no encuentra, cae en ALSA_LIB_DIR/ALSA_INCLUDE_DIR.
+          echo "ALSA_LIB_DIR=/opt/alsa/lib" >> "$GITHUB_ENV"
+          echo "ALSA_INCLUDE_DIR=/opt/alsa/include" >> "$GITHUB_ENV"
+          echo "ALSA_NO_PKG_CONFIG=1" >> "$GITHUB_ENV"
       - name: Build
         env:
           PKG_CONFIG_PATH: /opt/alsa/lib/pkgconfig
