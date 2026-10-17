@@ -169,6 +169,7 @@ jobs:
           # ALSA_NO_PKG_CONFIG=1 aborta el fallback (paradoja); hay que dejarlo sin setear.
           echo "ALSA_LIB_DIR=/opt/alsa/lib" >> "$GITHUB_ENV"
           echo "ALSA_INCLUDE_DIR=/opt/alsa/include" >> "$GITHUB_ENV"
+          echo "ALSA_NO_PKG_CONFIG=1" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
       - name: Build
         env:
