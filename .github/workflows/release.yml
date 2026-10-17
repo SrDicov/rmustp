@@ -27,6 +27,7 @@ jobs:
             gcc: i686-linux-gnu-gcc
             qemu: qemu-i386
             sysroot: /usr/i686-linux-gnu
+            pc: /usr/lib/i386-linux-gnu/pkgconfig
           - short: aarch64-gnu
             triple: aarch64-unknown-linux-gnu
             deb_arch: arm64
@@ -34,6 +35,7 @@ jobs:
             gcc: aarch64-linux-gnu-gcc
             qemu: qemu-aarch64
             sysroot: /usr/aarch64-linux-gnu
+            pc: /usr/lib/aarch64-linux-gnu/pkgconfig
           - short: armv7-gnu
             triple: armv7-unknown-linux-gnueabihf
             deb_arch: armhf
@@ -41,6 +43,7 @@ jobs:
             gcc: arm-linux-gnueabihf-gcc
             qemu: qemu-arm
             sysroot: /usr/arm-linux-gnueabihf
+            pc: /usr/lib/arm-linux-gnueabihf/pkgconfig
           - short: riscv64-gnu
             triple: riscv64gc-unknown-linux-gnu
             deb_arch: riscv64
@@ -48,6 +51,7 @@ jobs:
             gcc: riscv64-linux-gnu-gcc
             qemu: qemu-riscv64
             sysroot: /usr/riscv64-linux-gnu
+            pc: /usr/lib/riscv64-linux-gnu/pkgconfig
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -71,10 +75,11 @@ jobs:
         run: |
           T=$(echo '${{ matrix.triple }}' | tr 'a-z-' 'A-Z_')
           echo "CARGO_TARGET_${T}_LINKER=${{ matrix.gcc }}" >> "$GITHUB_ENV"
-          # ponytail: el PATH genérico manda sobre los defaults del host; sin esto
-          # el linker puede agarrar /usr/lib/x86_64-linux-gnu/libasound.so (visto en armv7).
-          echo "PKG_CONFIG_PATH=${{ matrix.sysroot }}/lib/pkgconfig" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_PATH_${T}=${{ matrix.sysroot }}/lib/pkgconfig" >> "$GITHUB_ENV"
+          # ponytail: todas las grafías (la crate mira minúsculas/guiones/TARGET_);
+          # el .pc correcto pone su -L primero y el host jamás se cuela (visto en armv7).
+          for v in PKG_CONFIG_PATH "PKG_CONFIG_PATH_${T}" "PKG_CONFIG_PATH_$(echo '${{ matrix.triple }}' | tr 'A-Z' 'a-z')" TARGET_PKG_CONFIG_PATH; do
+            echo "$v=${{ matrix.pc }}" >> "$GITHUB_ENV"
+          done
           echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
       - name: Build
         run: cargo build --release --target ${{ matrix.triple }}
@@ -160,9 +165,13 @@ jobs:
           cd "/tmp/alsa-lib-$ALSA"
           ./configure --host=${{ matrix.host }} --prefix=/opt/alsa --enable-shared=no --disable-python "CC=$CC"
           make -j"$(nproc)" && make install
-          # ponytail: TARGET_PKG_CONFIG_PATH la pone la imagen; anteponemos /opt/alsa
-          # sin pisar sus paths (pkg-config prioriza la específica sobre la genérica).
-          echo "TARGET_PKG_CONFIG_PATH=/opt/alsa/lib/pkgconfig${TARGET_PKG_CONFIG_PATH:+:$TARGET_PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+          # ponytail: todas las grafías a /opt/alsa (la crate ignora las que no mira;
+          # la imagen no trae alsa, así que pisar sus paths es seguro).
+          TU=$(echo '${{ matrix.triple }}' | tr 'a-z-' 'A-Z_')
+          TD=$(echo '${{ matrix.triple }}' | tr 'A-Z' 'a-z')
+          for v in PKG_CONFIG_PATH "PKG_CONFIG_PATH_${TU}" "PKG_CONFIG_PATH_${TD}" TARGET_PKG_CONFIG_PATH; do
+            echo "$v=/opt/alsa/lib/pkgconfig" >> "$GITHUB_ENV"
+          done
       - name: Build
         env:
           PKG_CONFIG_PATH: /opt/alsa/lib/pkgconfig
