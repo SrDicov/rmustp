@@ -169,13 +169,17 @@ jobs:
           # ALSA_NO_PKG_CONFIG=1 aborta el fallback (paradoja); hay que dejarlo sin setear.
           echo "ALSA_LIB_DIR=/opt/alsa/lib" >> "$GITHUB_ENV"
           echo "ALSA_INCLUDE_DIR=/opt/alsa/include" >> "$GITHUB_ENV"
-          echo "ALSA_NO_PKG_CONFIG=1" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
       - name: Build
-        env:
-          PKG_CONFIG_PATH: /opt/alsa/lib/pkgconfig
-          PKG_CONFIG_ALLOW_CROSS: 1
-        run: cargo build --release --target ${{ matrix.triple }}
+        run: |
+          # ponytail: la imagen messense inyecta TARGET_PKG_CONFIG_SYSROOT_DIR y
+          # TARGET_PKG_CONFIG_LIBDIR (sysroot musl, sin alsa.pc). pkg-config ignora
+          # PKG_CONFIG_PATH cuando PKG_CONFIG_LIBDIR está seteado, así que las
+          # quitamos y dejamos solo nuestro path con alsa.pc.
+          unset PKG_CONFIG_LIBDIR PKG_CONFIG_SYSROOT_DIR \
+                TARGET_PKG_CONFIG_LIBDIR TARGET_PKG_CONFIG_SYSROOT_DIR 2>/dev/null || true
+          export PKG_CONFIG_PATH=/opt/alsa/lib/pkgconfig
+          cargo build --release --target ${{ matrix.triple }}
       - name: Smoke (QEMU, static)
         run: |
           apt-get update -qq || true; apt-get install -y -qq qemu-user
