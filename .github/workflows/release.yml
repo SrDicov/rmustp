@@ -172,17 +172,20 @@ jobs:
           echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
       - name: Build
         run: |
-          # ponytail: la imagen messense inyecta TARGET_PKG_CONFIG_* en
-          # ~/.cargo/config.toml (sysroot musl, sin alsa.pc). Forzamos pkg-config
-          # hacia /opt/alsa (alsa.pc generado arriba) con un config mínimo.
+          # ponytail: la imagen messense inyecta TARGET_PKG_CONFIG_LIBDIR/SYSROOT_DIR
+          # (sysroot musl, sin alsa.pc). Las unset y fuerzo PKG_CONFIG_PATH hacia
+          # /opt/alsa (alsa.pc generado arriba). El config.toml [env] refuerza esto
+          # para los build scripts de las dependencias.
           TU=$(echo '${{ matrix.triple }}' | tr 'a-z-' 'A-Z_')
           LINKER="${{ matrix.gcc }}"
           mkdir -p "$HOME/.cargo"
           printf '[env]\nPKG_CONFIG_PATH = "/opt/alsa/lib/pkgconfig"\nPKG_CONFIG_ALLOW_CROSS = "1"\n\n[target.%s]\nlinker = "%s"\n' "${{ matrix.triple }}" "${{ matrix.gcc }}" > "$HOME/.cargo/config.toml"
           cat "$HOME/.cargo/config.toml"
-          env -i HOME="$HOME" \
-            PATH="/usr/local/musl/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin" \
-            cargo build --release --target ${{ matrix.triple }}
+          unset TARGET_PKG_CONFIG_LIBDIR TARGET_PKG_CONFIG_SYSROOT_DIR TARGET_PKG_CONFIG_PATH PKG_CONFIG_LIBDIR PKG_CONFIG_SYSROOT_DIR 2>/dev/null || true
+          export PKG_CONFIG_PATH=/opt/alsa/lib/pkgconfig
+          export PKG_CONFIG_ALLOW_CROSS=1
+          export CARGO_TARGET_${TU}_LINKER="$LINKER"
+          cargo build --release --target ${{ matrix.triple }}
       - name: Smoke (QEMU, static)
         run: |
           apt-get update -qq || true; apt-get install -y -qq qemu-user
