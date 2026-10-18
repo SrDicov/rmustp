@@ -172,17 +172,23 @@ jobs:
           echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
       - name: Build
         run: |
-          # ponytail: la imagen messense inyecta TARGET_PKG_CONFIG_* que apuntan
-          # al sysroot musl (sin alsa.pc). Limpiamos todo y pasamos solo lo
-          # imprescindible con PKG_CONFIG_PATH=/opt/alsa/lib/pkgconfig (alsa.pc
-          # generado por ./configure --prefix=/opt/alsa arriba).
+          # ponytail: la imagen messense inyecta TARGET_PKG_CONFIG_* en
+          # ~/.cargo/config.toml (sysroot musl, sin alsa.pc). Escribimos un config
+          # mínimo que fuerce pkg-config hacia /opt/alsa (alsa.pc generado arriba)
+          # y el linker correcto para este target.
           TU=$(echo '${{ matrix.triple }}' | tr 'a-z-' 'A-Z_')
           LINKER="${{ matrix.gcc }}"
+          mkdir -p "$HOME/.cargo"
+          cat > "$HOME/.cargo/config.toml" <<EOF
+[target.${{ matrix.triple }}]
+linker = "${{ matrix.gcc }}"
+
+[env]
+PKG_CONFIG_PATH = "/opt/alsa/lib/pkgconfig"
+PKG_CONFIG_ALLOW_CROSS = "1"
+EOF
           env -i HOME="$HOME" \
             PATH="/usr/local/musl/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin" \
-            PKG_CONFIG_PATH=/opt/alsa/lib/pkgconfig \
-            PKG_CONFIG_ALLOW_CROSS=1 \
-            "CARGO_TARGET_${TU}_LINKER=$LINKER" \
             cargo build --release --target ${{ matrix.triple }}
       - name: Smoke (QEMU, static)
         run: |
