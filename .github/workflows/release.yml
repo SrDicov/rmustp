@@ -208,6 +208,7 @@ jobs:
             rmustp-${{ github.ref_name }}-${{ matrix.short }}.tar.gz.sha256
 
   publish:
+    if: always()
     runs-on: ubuntu-latest
     needs: [build-gnu, build-musl]
     steps:
