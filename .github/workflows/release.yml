@@ -179,14 +179,14 @@ jobs:
           TU=$(echo '${{ matrix.triple }}' | tr 'a-z-' 'A-Z_')
           LINKER="${{ matrix.gcc }}"
           mkdir -p "$HOME/.cargo"
-          cat > "$HOME/.cargo/config.toml" <<EOF
-[target.${{ matrix.triple }}]
-linker = "${{ matrix.gcc }}"
-
+          cat > "$HOME/.cargo/config.toml" <<'CONF'
 [env]
 PKG_CONFIG_PATH = "/opt/alsa/lib/pkgconfig"
 PKG_CONFIG_ALLOW_CROSS = "1"
-EOF
+CONF
+          echo "[target.${{ matrix.triple }}]" >> "$HOME/.cargo/config.toml"
+          echo 'linker = "${{ matrix.gcc }}"' >> "$HOME/.cargo/config.toml"
+          cat "$HOME/.cargo/config.toml"
           env -i HOME="$HOME" \
             PATH="/usr/local/musl/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin" \
             cargo build --release --target ${{ matrix.triple }}
