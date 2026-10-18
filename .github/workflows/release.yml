@@ -172,14 +172,18 @@ jobs:
           echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
       - name: Build
         run: |
-          # ponytail: la imagen messense inyecta TARGET_PKG_CONFIG_SYSROOT_DIR y
-          # TARGET_PKG_CONFIG_LIBDIR (sysroot musl, sin alsa.pc). pkg-config ignora
-          # PKG_CONFIG_PATH cuando PKG_CONFIG_LIBDIR está seteado, así que las
-          # quitamos y dejamos solo nuestro path con alsa.pc.
-          unset PKG_CONFIG_LIBDIR PKG_CONFIG_SYSROOT_DIR \
-                TARGET_PKG_CONFIG_LIBDIR TARGET_PKG_CONFIG_SYSROOT_DIR 2>/dev/null || true
-          export PKG_CONFIG_PATH=/opt/alsa/lib/pkgconfig
-          cargo build --release --target ${{ matrix.triple }}
+          # ponytail: la imagen messense inyecta TARGET_PKG_CONFIG_* que apuntan
+          # al sysroot musl (sin alsa.pc). Limpiamos todo y pasamos solo lo
+          # imprescindible con PKG_CONFIG_PATH=/opt/alsa/lib/pkgconfig (alsa.pc
+          # generado por ./configure --prefix=/opt/alsa arriba).
+          TU=$(echo '${{ matrix.triple }}' | tr 'a-z-' 'A-Z_')
+          LINKER="${{ matrix.gcc }}"
+          env -i HOME="$HOME" \
+            PATH="/usr/local/musl/bin:/usr/local/bin:/usr/bin:/bin" \
+            PKG_CONFIG_PATH=/opt/alsa/lib/pkgconfig \
+            PKG_CONFIG_ALLOW_CROSS=1 \
+            "CARGO_TARGET_${TU}_LINKER=$LINKER" \
+            cargo build --release --target ${{ matrix.triple }}
       - name: Smoke (QEMU, static)
         run: |
           apt-get update -qq || true; apt-get install -y -qq qemu-user
