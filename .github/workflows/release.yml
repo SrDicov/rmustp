@@ -217,8 +217,11 @@ jobs:
           pattern: rmustp-*
           path: artifacts
           merge-multiple: true
-      - name: List
-        run: ls -l artifacts/ && sha256sum -c artifacts/*.sha256
+      - name: Verify checksums
+        working-directory: artifacts
+        run: |
+          ls -l
+          sha256sum -c *.sha256
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
