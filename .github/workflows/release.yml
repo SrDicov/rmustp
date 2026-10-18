@@ -173,19 +173,12 @@ jobs:
       - name: Build
         run: |
           # ponytail: la imagen messense inyecta TARGET_PKG_CONFIG_* en
-          # ~/.cargo/config.toml (sysroot musl, sin alsa.pc). Escribimos un config
-          # mínimo que fuerce pkg-config hacia /opt/alsa (alsa.pc generado arriba)
-          # y el linker correcto para este target.
+          # ~/.cargo/config.toml (sysroot musl, sin alsa.pc). Forzamos pkg-config
+          # hacia /opt/alsa (alsa.pc generado arriba) con un config mínimo.
           TU=$(echo '${{ matrix.triple }}' | tr 'a-z-' 'A-Z_')
           LINKER="${{ matrix.gcc }}"
           mkdir -p "$HOME/.cargo"
-          cat > "$HOME/.cargo/config.toml" <<'CONF'
-[env]
-PKG_CONFIG_PATH = "/opt/alsa/lib/pkgconfig"
-PKG_CONFIG_ALLOW_CROSS = "1"
-CONF
-          echo "[target.${{ matrix.triple }}]" >> "$HOME/.cargo/config.toml"
-          echo 'linker = "${{ matrix.gcc }}"' >> "$HOME/.cargo/config.toml"
+          printf '[env]\nPKG_CONFIG_PATH = "/opt/alsa/lib/pkgconfig"\nPKG_CONFIG_ALLOW_CROSS = "1"\n\n[target.%s]\nlinker = "%s"\n' "${{ matrix.triple }}" "${{ matrix.gcc }}" > "$HOME/.cargo/config.toml"
           cat "$HOME/.cargo/config.toml"
           env -i HOME="$HOME" \
             PATH="/usr/local/musl/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin" \
